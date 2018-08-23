@@ -4,14 +4,16 @@ from collections import deque
 import time
 from PyQt5.QAxContainer import *
 import csv
+import threading
 
 '''Input options'''
-daily_num = 3
-k = 0.5
-profit_rate = 1.5     # 1.5 for 1.5%
+daily_num = 15
+k = 0.2
+profit_rate = 1.33     # 1.5 for 1.5%
 rate_limit = 0      # 10 for 10%
 
 '''Local variables'''
+is_processing = 0
 working_dates = []
 queue_recv = deque(maxlen=2)
 
@@ -27,8 +29,8 @@ class ViewController:
         super().__init__()
 
         self.kiwoom = QAxWidget("KHOPENAPI.KHOpenAPICtrl.1")
-        [self.code, self.code_curr] = ["", ""]
-        [self.name, self.name_curr] = ["", ""]
+        self.code = ""
+        self.name = ""
         self.login()
 
         # kiwoom Open API event Trigger
@@ -42,9 +44,14 @@ class ViewController:
         if err_code == 0:
             print("Login Succeed")
             self.get_item_list()
+            # self.get_item_list()
 
     # 종목 리스트 요청
     def get_item_list(self):
+        threading.Thread(target=self._get_item_list).start()
+
+    def _get_item_list(self):
+        global is_processing
         print("Generating working dates")
         with open("code_name.txt", encoding="utf-8") as f:
             for line in f:
@@ -57,40 +64,67 @@ class ViewController:
 
         print("Getting item list")
         with open("code_name.txt", encoding="utf-8") as f:
+            curr_date = ""
+            cnt = 0
             for line in f:
                 line = line.strip()
                 words = line.split()
 
+                if curr_date != words[0]:
+                    curr_date = words[0]
+                    cnt = 1
+                else:
+                    if cnt >= daily_num:
+                        continue
+                    cnt = cnt + 1
+
                 if words[2] == "끝":
-                    for date, item in above_target_price_dict.items():
-                        above_target_price_dict[date].sort(key=lambda q: q[3], reverse=True)
-                        above_target_price_dict[date] = above_target_price_dict[date][:daily_num]
-                        above_profit_target_price_dict[date].sort(key=lambda q: q[3], reverse=True)
-                        above_profit_target_price_dict[date] = above_profit_target_price_dict[date][:daily_num]
+                    while is_processing != 2:
+                        time.sleep(1)
+                    try:
+                        try:
+                            for date, item in above_target_price_dict.items():
+                                above_target_price_dict[date].sort(key=lambda q: q[3], reverse=True)
+                                above_target_price_dict[date] = above_target_price_dict[date][:daily_num]
+                                above_profit_target_price_dict[date].sort(key=lambda q: q[3], reverse=True)
+                                above_profit_target_price_dict[date] = above_profit_target_price_dict[date][:daily_num]
+                        except:
+                            print("Error generating base dicts")
 
-                    for key, value in above_target_price_dict.items():
-                        companies_above_target_price_dict[key] = [t[2] for t in above_target_price_dict[key] if
-                                                                  t[0] == 1]
-                        companies_above_profit_target_price_dict[key] = [t[2] for t in
-                                                                         above_profit_target_price_dict[key] if
-                                                                         t[0] == 1]
-                        complement_companies_set_dict[key] = list(set(companies_above_target_price_dict[key]) -
-                                                                  set(companies_above_profit_target_price_dict[key]))
+                        try:
+                            for key, value in above_target_price_dict.items():
+                                companies_above_target_price_dict[key] = [t[2] for t in above_target_price_dict[key] if
+                                                                          t[0] == 1]
+                                companies_above_profit_target_price_dict[key] = [t[2] for t in
+                                                                                 above_profit_target_price_dict[key] if
+                                                                                 t[0] == 1]
+                                complement_companies_set_dict[key] = list(set(companies_above_target_price_dict[key]) -
+                                                                          set(companies_above_profit_target_price_dict[key]))
+                        except:
+                            print("Error organizing dicts")
 
-                    for key, value in complement_companies_set_dict.items():
-                        complement_companies_set_dict[key] = [[t[2], t[4], t[5], t[6]] for t in
-                                                              above_target_price_dict[key] if t[2] in value]
+                        try:
+                            for key, value in complement_companies_set_dict.items():
+                                complement_companies_set_dict[key] = [[t[2], t[4], t[5], t[6]] for t in
+                                                                      above_target_price_dict[key] if t[2] in value]
+                        except:
+                            print("Error generating cc dict")
 
-                    for key, value in above_target_price_dict.items():
-                        above_target_price_dict[key] = [sum([x[0] for x in above_target_price_dict[key]])]
-                        above_profit_target_price_dict[key] = [sum([x[0] for x in above_profit_target_price_dict[key]])]
+                        try:
+                            for key, value in above_target_price_dict.items():
+                                above_target_price_dict[key] = [sum([x[0] for x in above_target_price_dict[key]])]
+                                above_profit_target_price_dict[key] = [sum([x[0] for x in above_profit_target_price_dict[key]])]
+                        except:
+                            print("Error slicing dicts")
 
-                    sum1 = 0.00000000001  # to escape from divided by zero exception
-                    sum2 = 0.00000000001  # same as above
-                    for key, value in above_target_price_dict.items():
-                        sum1 = sum1 + above_target_price_dict[key][0]
-                        sum2 = sum2 + above_profit_target_price_dict[key][0]
-                    sum2_divided_by_sum1 = sum2 / sum1
+                        sum1 = 0.00000000001  # to escape from divided by zero exception
+                        sum2 = 0.00000000001  # same as above
+                        for key, value in above_target_price_dict.items():
+                            sum1 = sum1 + above_target_price_dict[key][0]
+                            sum2 = sum2 + above_profit_target_price_dict[key][0]
+                        sum2_divided_by_sum1 = sum2 / sum1
+                    except:
+                        print("Unknown error occurred while processing whole data")
 
                     print("Sum1: {}".format(sum1))
                     print("Sum2: {}".format(sum2))
@@ -134,13 +168,12 @@ class ViewController:
                     self.code = "0" + self.code
                 self.name = words[2]     # "동화약품"
 
-                if self.code_curr == "":
-                    self.code_curr = self.code
-                if self.name_curr == "":
-                    self.name_curr = self.name
-
+                is_processing = 0
                 self.get_stock_price_by_day(self.code, date)
                 time.sleep(1)
+
+                while is_processing != 1:
+                    time.sleep(1)
 
                 next_date = date + timedelta(days=1)
                 while next_date not in working_dates:
@@ -148,6 +181,9 @@ class ViewController:
 
                 self.get_stock_price_by_day(self.code, next_date)
                 time.sleep(1)
+
+                while is_processing != 2:
+                    time.sleep(1)
 
     def get_stock_price_by_day(self, code, date):
         self.kiwoom.dynamicCall("SetInputValue(QStirng, QString)", "종목코드", code)
@@ -157,6 +193,7 @@ class ViewController:
 
     def receive_tr_data(self, s_scr_no, s_rq_name, s_tr_code, s_record_name, s_prev_next,
                         n_data_length, s_error_code, s_message, s_splmMsg):
+        global is_processing
         try:
             if s_tr_code == "opt10086":
                 if s_rq_name == "일별주가요청":
@@ -172,14 +209,8 @@ class ViewController:
                         item.append(rtn)
 
                     if len(item) == 6:      # Safe check
-                        if self.name == self.name_curr:
-                            item.insert(1, self.name)
-                            item.insert(1, self.code)
-                        else:
-                            item.insert(1, self.name_curr)
-                            item.insert(1, self.code_curr)
-                    self.code_curr = self.code
-                    self.name_curr = self.name
+                        item.insert(1, self.name)
+                        item.insert(1, self.code)
 
                     # [20180816, '우리은행', '000030', 10600, 11050, 11100, 10300, -6.19]
                     # date(0), symbol(1), name(2), close(3), open(4), high(5), low(6), change(7)
@@ -196,17 +227,17 @@ class ViewController:
                         if target_price <= item[5]:
                             # [1, '001040', 'CJ', 8000.0], [0, '082740', 'HSD엔진', 275.0, target_price]
                             # key: date, item: [0/1(0), symbol(1), name(2), curr_uprate(3),
-                            #                   target_price(4), 익일_시가(5), 수익률(6)].
+                            #                   target_price(4), 당일_종가(5), 수익률(6)].
                             # Use (3) to sort the list.
-                            if item[0] in above_target_price_dict:
+                            if curr_day_item[0] in above_target_price_dict:
                                 above_target_price_dict[curr_day_item[0]] = \
                                     above_target_price_dict[curr_day_item[0]] + \
                                     [[1, item[1], item[2], curr_uprate, target_price, item[4],
-                                      100*profit_rate*(item[4]-target_price)/target_price]]     # TODO: is this right?
+                                      100*(item[3]-target_price)/target_price]]
                             else:
                                 above_target_price_dict[curr_day_item[0]] = [[1, item[1], item[2], curr_uprate]]
                         else:
-                            if item[0] in above_target_price_dict:
+                            if curr_day_item[0] in above_target_price_dict:
                                 above_target_price_dict[curr_day_item[0]] = above_target_price_dict[curr_day_item[0]] \
                                                                    + [[0, item[1], item[2], curr_uprate]]
                             else:
@@ -215,14 +246,14 @@ class ViewController:
                         # 2. 최대값(고가)이 목표가(target price) * 수익률을 넘어선 횟수
                         if ((100.0 + profit_rate) / 100.0) * (item[4] + k * (curr_day_item[5] - curr_day_item[6])) <= \
                                 item[5]:
-                            if item[0] in above_profit_target_price_dict:
+                            if curr_day_item[0] in above_profit_target_price_dict:
                                 above_profit_target_price_dict[curr_day_item[0]] = \
                                     above_profit_target_price_dict[curr_day_item[0]] + \
                                     [[1, item[1], item[2], curr_uprate]]
                             else:
                                 above_profit_target_price_dict[curr_day_item[0]] = [[1, item[1], item[2], curr_uprate]]
                         else:
-                            if item[0] in above_profit_target_price_dict:
+                            if curr_day_item[0] in above_profit_target_price_dict:
                                 above_profit_target_price_dict[curr_day_item[0]] = \
                                     above_profit_target_price_dict[curr_day_item[0]] + \
                                     [[0, item[1], item[2], curr_uprate]]
@@ -230,3 +261,4 @@ class ViewController:
                                 above_profit_target_price_dict[curr_day_item[0]] = [[0, item[1], item[2], curr_uprate]]
         except:     # Catch all possible errors
             print("*** Error occurred: {} {}".format(self.code, self.name))
+        is_processing = is_processing + 1
