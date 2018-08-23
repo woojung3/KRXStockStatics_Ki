@@ -11,11 +11,15 @@ daily_num = 15
 k = 0.2
 profit_rate = 1.33     # 1.5 for 1.5%
 rate_limit = 0      # 10 for 10%
+three_day_mode_on = True
 
 '''Local variables'''
 is_processing = 0
 working_dates = []
-queue_recv = deque(maxlen=2)
+if three_day_mode_on:
+    queue_recv = deque(maxlen=3)
+else:
+    queue_recv = deque(maxlen=2)
 
 above_target_price_dict = {}    # key: date, value: item
 above_profit_target_price_dict = {}  # key: date, value: item
@@ -60,6 +64,8 @@ class ViewController:
 
                 working_dates.append(datetime.strptime(words[0], "%Y-%m-%d"))
                 if words[2] == "끝":
+                    if three_day_mode_on:
+                        working_dates.append(datetime.strptime(words[1], "%Y-%m-%d"))
                     break
 
         print("Getting item list")
@@ -79,7 +85,9 @@ class ViewController:
                     cnt = cnt + 1
 
                 if words[2] == "끝":
-                    while is_processing != 2:
+                    while not three_day_mode_on and is_processing != 2:
+                        time.sleep(1)
+                    while three_day_mode_on and is_processing != 3:
                         time.sleep(1)
                     try:
                         try:
@@ -154,15 +162,6 @@ class ViewController:
 
                 date = datetime.strptime(words[0], "%Y-%m-%d")     # "2018-02-02"
 
-                # # Now this program uses date input... is this code needed?
-                # if date.weekday() in [5, 6]:
-                #     if date.weekday() == 5:
-                #         date = date - timedelta(days=1)    # if Saturday change date to Friday
-                #         date_prev = date_prev - timedelta(days=1)
-                #     elif date.weekday() == 6:
-                #         date = date - timedelta(days=2)    # if Sunday change date to Friday
-                #         date_prev = date_prev - timedelta(days=2)
-
                 self.code = words[1]     # "000020"
                 while len(self.code) < 6:   # HACK: 0s should be prepended to code
                     self.code = "0" + self.code
@@ -184,6 +183,17 @@ class ViewController:
 
                 while is_processing != 2:
                     time.sleep(1)
+
+                if three_day_mode_on:
+                    next_date = next_date + timedelta(days=1)
+                    while next_date not in working_dates:
+                        next_date = next_date + timedelta(days=1)
+
+                    self.get_stock_price_by_day(self.code, next_date)
+                    time.sleep(1)
+
+                    while is_processing != 3:
+                        time.sleep(1)
 
     def get_stock_price_by_day(self, code, date):
         self.kiwoom.dynamicCall("SetInputValue(QStirng, QString)", "종목코드", code)
@@ -215,50 +225,97 @@ class ViewController:
                     # [20180816, '우리은행', '000030', 10600, 11050, 11100, 10300, -6.19]
                     # date(0), symbol(1), name(2), close(3), open(4), high(5), low(6), change(7)
                     queue_recv.append(item)
-                    if len(queue_recv) == 2 and queue_recv[0][1] == queue_recv[1][1] and queue_recv[0][1]\
-                            == queue_recv[1][1] and queue_recv[0][7] > rate_limit:
-                        print("Processing: {}".format(queue_recv))
-                        curr_day_item = queue_recv[0]
-                        item = queue_recv[1]    # item = next day item
-                        curr_uprate = curr_day_item[7]  # use change as uprate value.
+                    if not three_day_mode_on:
+                        if len(queue_recv) == 2 and queue_recv[0][1] == queue_recv[1][1] \
+                                and queue_recv[0][7] > rate_limit:
+                            print("Processing: {}".format(queue_recv))
+                            curr_day_item = queue_recv[0]
+                            item = queue_recv[1]    # item = next day item
+                            curr_uprate = curr_day_item[7]  # use change as uprate value.
 
-                        # 1. 최대값(고가) 이 목표가(target price) 를 넘어선 횟수
-                        target_price = item[4] + k * (curr_day_item[5] - curr_day_item[6])
-                        if target_price <= item[5]:
-                            # [1, '001040', 'CJ', 8000.0], [0, '082740', 'HSD엔진', 275.0, target_price]
-                            # key: date, item: [0/1(0), symbol(1), name(2), curr_uprate(3),
-                            #                   target_price(4), 당일_종가(5), 수익률(6)].
-                            # Use (3) to sort the list.
-                            if curr_day_item[0] in above_target_price_dict:
-                                above_target_price_dict[curr_day_item[0]] = \
-                                    above_target_price_dict[curr_day_item[0]] + \
-                                    [[1, item[1], item[2], curr_uprate, target_price, item[4],
-                                      100*(item[3]-target_price)/target_price]]
+                            # 1. 최대값(고가) 이 목표가(target price) 를 넘어선 횟수
+                            target_price = item[4] + k * (curr_day_item[5] - curr_day_item[6])
+                            if target_price <= item[5]:
+                                # [1, '001040', 'CJ', 8000.0], [0, '082740', 'HSD엔진', 275.0, target_price]
+                                # key: date, item: [0/1(0), symbol(1), name(2), curr_uprate(3),
+                                #                   target_price(4), 당일_종가(5), 수익률(6)].
+                                # Use (3) to sort the list.
+                                if curr_day_item[0] in above_target_price_dict:
+                                    above_target_price_dict[curr_day_item[0]] = \
+                                        above_target_price_dict[curr_day_item[0]] + \
+                                        [[1, item[1], item[2], curr_uprate, target_price, item[4],
+                                          100*(item[3]-target_price)/target_price]]
+                                else:
+                                    above_target_price_dict[curr_day_item[0]] = [[1, item[1], item[2], curr_uprate]]
                             else:
-                                above_target_price_dict[curr_day_item[0]] = [[1, item[1], item[2], curr_uprate]]
-                        else:
-                            if curr_day_item[0] in above_target_price_dict:
-                                above_target_price_dict[curr_day_item[0]] = above_target_price_dict[curr_day_item[0]] \
-                                                                   + [[0, item[1], item[2], curr_uprate]]
-                            else:
-                                above_target_price_dict[curr_day_item[0]] = [[0, item[1], item[2], curr_uprate]]
+                                if curr_day_item[0] in above_target_price_dict:
+                                    above_target_price_dict[curr_day_item[0]] = above_target_price_dict[curr_day_item[0]] \
+                                                                       + [[0, item[1], item[2], curr_uprate]]
+                                else:
+                                    above_target_price_dict[curr_day_item[0]] = [[0, item[1], item[2], curr_uprate]]
 
-                        # 2. 최대값(고가)이 목표가(target price) * 수익률을 넘어선 횟수
-                        if ((100.0 + profit_rate) / 100.0) * (item[4] + k * (curr_day_item[5] - curr_day_item[6])) <= \
-                                item[5]:
-                            if curr_day_item[0] in above_profit_target_price_dict:
-                                above_profit_target_price_dict[curr_day_item[0]] = \
-                                    above_profit_target_price_dict[curr_day_item[0]] + \
-                                    [[1, item[1], item[2], curr_uprate]]
+                            # 2. 최대값(고가)이 목표가(target price) * 수익률을 넘어선 횟수
+                            if ((100.0 + profit_rate) / 100.0) * (item[4] + k * (curr_day_item[5] - curr_day_item[6])) <= \
+                                    item[5]:
+                                if curr_day_item[0] in above_profit_target_price_dict:
+                                    above_profit_target_price_dict[curr_day_item[0]] = \
+                                        above_profit_target_price_dict[curr_day_item[0]] + \
+                                        [[1, item[1], item[2], curr_uprate]]
+                                else:
+                                    above_profit_target_price_dict[curr_day_item[0]] = [[1, item[1], item[2], curr_uprate]]
                             else:
-                                above_profit_target_price_dict[curr_day_item[0]] = [[1, item[1], item[2], curr_uprate]]
-                        else:
-                            if curr_day_item[0] in above_profit_target_price_dict:
-                                above_profit_target_price_dict[curr_day_item[0]] = \
-                                    above_profit_target_price_dict[curr_day_item[0]] + \
-                                    [[0, item[1], item[2], curr_uprate]]
+                                if curr_day_item[0] in above_profit_target_price_dict:
+                                    above_profit_target_price_dict[curr_day_item[0]] = \
+                                        above_profit_target_price_dict[curr_day_item[0]] + \
+                                        [[0, item[1], item[2], curr_uprate]]
+                                else:
+                                    above_profit_target_price_dict[curr_day_item[0]] = [[0, item[1], item[2], curr_uprate]]
+                    elif three_day_mode_on:
+                        if len(queue_recv) == 3 and queue_recv[0][1] == queue_recv[1][1] and queue_recv[1][1] \
+                                == queue_recv[2][1] and queue_recv[0][7] > rate_limit:
+                            print("Processing: {}".format(queue_recv))
+                            curr_day_item = queue_recv[0]
+                            item = queue_recv[1]    # item = next day item
+                            next_day_item = queue_recv[2]
+                            curr_uprate = curr_day_item[7]  # use change as uprate value.
+
+                            # 1. 최대값(고가) 이 목표가(target price) 를 넘어선 횟수
+                            target_price = item[4] + k * (curr_day_item[5] - curr_day_item[6])
+                            if target_price <= item[5]:
+                                # [1, '001040', 'CJ', 8000.0], [0, '082740', 'HSD엔진', 275.0, target_price]
+                                # key: date, item: [0/1(0), symbol(1), name(2), curr_uprate(3),
+                                #                   target_price(4), 익일_시가(5), 수익률(6)].
+                                # Use (3) to sort the list.
+                                if curr_day_item[0] in above_target_price_dict:
+                                    above_target_price_dict[curr_day_item[0]] = \
+                                        above_target_price_dict[curr_day_item[0]] + \
+                                        [[1, item[1], item[2], curr_uprate, target_price, item[4],
+                                          100*(next_day_item[4]-target_price)/target_price]]
+                                else:
+                                    above_target_price_dict[curr_day_item[0]] = [[1, item[1], item[2], curr_uprate]]
                             else:
-                                above_profit_target_price_dict[curr_day_item[0]] = [[0, item[1], item[2], curr_uprate]]
+                                if curr_day_item[0] in above_target_price_dict:
+                                    above_target_price_dict[curr_day_item[0]] = above_target_price_dict[curr_day_item[0]] \
+                                                                                + [[0, item[1], item[2], curr_uprate]]
+                                else:
+                                    above_target_price_dict[curr_day_item[0]] = [[0, item[1], item[2], curr_uprate]]
+
+                            # 2. 최대값(고가)이 목표가(target price) * 수익률을 넘어선 횟수
+                            if ((100.0 + profit_rate) / 100.0) * (item[4] + k * (curr_day_item[5] - curr_day_item[6])) <= \
+                                    item[5]:
+                                if curr_day_item[0] in above_profit_target_price_dict:
+                                    above_profit_target_price_dict[curr_day_item[0]] = \
+                                        above_profit_target_price_dict[curr_day_item[0]] + \
+                                        [[1, item[1], item[2], curr_uprate]]
+                                else:
+                                    above_profit_target_price_dict[curr_day_item[0]] = [[1, item[1], item[2], curr_uprate]]
+                            else:
+                                if curr_day_item[0] in above_profit_target_price_dict:
+                                    above_profit_target_price_dict[curr_day_item[0]] = \
+                                        above_profit_target_price_dict[curr_day_item[0]] + \
+                                        [[0, item[1], item[2], curr_uprate]]
+                                else:
+                                    above_profit_target_price_dict[curr_day_item[0]] = [[0, item[1], item[2], curr_uprate]]
         except:     # Catch all possible errors
             print("*** Error occurred: {} {}".format(self.code, self.name))
         is_processing = is_processing + 1
