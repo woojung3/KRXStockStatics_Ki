@@ -7,11 +7,11 @@ import csv
 import threading
 
 '''Input options'''
-daily_num = 15
-k = 0.2
+daily_num = 8
+k = 0.5
 profit_rate = 1.33     # 1.5 for 1.5%
-rate_limit = 0      # 10 for 10%
-three_day_mode_on = True
+rate_limit = 10      # 10 for 10%
+three_day_mode_on = False
 
 '''Local variables'''
 is_processing = 0
@@ -246,13 +246,18 @@ class ViewController:
                                         [[1, item[1], item[2], curr_uprate, target_price, item[4],
                                           100*(item[3]-target_price)/target_price]]
                                 else:
-                                    above_target_price_dict[curr_day_item[0]] = [[1, item[1], item[2], curr_uprate]]
+                                    above_target_price_dict[curr_day_item[0]] = [[1, item[1], item[2], curr_uprate,
+                                                                                  target_price, item[4],
+                                                                                  100*(item[3]-target_price)/target_price]]
                             else:
                                 if curr_day_item[0] in above_target_price_dict:
-                                    above_target_price_dict[curr_day_item[0]] = above_target_price_dict[curr_day_item[0]] \
-                                                                       + [[0, item[1], item[2], curr_uprate]]
+                                    above_target_price_dict[curr_day_item[0]] = above_target_price_dict[curr_day_item[0]] + \
+                                                                                [[0, item[1], item[2], curr_uprate, target_price, item[4],
+                                                                                  100*(item[3]-target_price)/target_price]]
                                 else:
-                                    above_target_price_dict[curr_day_item[0]] = [[0, item[1], item[2], curr_uprate]]
+                                    above_target_price_dict[curr_day_item[0]] = [[0, item[1], item[2], curr_uprate,
+                                                                                  target_price, item[4],
+                                                                                  100*(item[3]-target_price)/target_price]]
 
                             # 2. 최대값(고가)이 목표가(target price) * 수익률을 넘어선 횟수
                             if ((100.0 + profit_rate) / 100.0) * (item[4] + k * (curr_day_item[5] - curr_day_item[6])) <= \
