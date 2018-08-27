@@ -115,6 +115,8 @@ class ViewController:
                             for key, value in complement_companies_set_dict.items():
                                 complement_companies_set_dict[key] = [[t[2], t[4], t[5], t[6]] for t in
                                                                       above_target_price_dict[key] if t[2] in value]
+                            print("CC sum: {}".format(sum([sum([x[3] for x in value]) for key, value in
+                                                           complement_companies_set_dict.items()])))
                         except:
                             print("Error generating cc dict")
 
@@ -265,16 +267,22 @@ class ViewController:
                                 if curr_day_item[0] in above_profit_target_price_dict:
                                     above_profit_target_price_dict[curr_day_item[0]] = \
                                         above_profit_target_price_dict[curr_day_item[0]] + \
-                                        [[1, item[1], item[2], curr_uprate]]
+                                        [[1, item[1], item[2], curr_uprate, target_price, item[4],
+                                          100*(item[3]-target_price)/target_price]]
                                 else:
-                                    above_profit_target_price_dict[curr_day_item[0]] = [[1, item[1], item[2], curr_uprate]]
+                                    above_profit_target_price_dict[curr_day_item[0]] = [[1, item[1], item[2], curr_uprate,
+                                                                                         target_price, item[4],
+                                                                                         100*(item[3]-target_price)/target_price]]
                             else:
                                 if curr_day_item[0] in above_profit_target_price_dict:
                                     above_profit_target_price_dict[curr_day_item[0]] = \
                                         above_profit_target_price_dict[curr_day_item[0]] + \
-                                        [[0, item[1], item[2], curr_uprate]]
+                                        [[0, item[1], item[2], curr_uprate, target_price, item[4],
+                                          100*(item[3]-target_price)/target_price]]
                                 else:
-                                    above_profit_target_price_dict[curr_day_item[0]] = [[0, item[1], item[2], curr_uprate]]
+                                    above_profit_target_price_dict[curr_day_item[0]] = [[0, item[1], item[2], curr_uprate,
+                                                                                         target_price, item[4],
+                                                                                         100*(item[3]-target_price)/target_price]]
                     elif three_day_mode_on:
                         if len(queue_recv) == 3 and queue_recv[0][1] == queue_recv[1][1] and queue_recv[1][1] \
                                 == queue_recv[2][1] and queue_recv[0][7] > rate_limit:
@@ -297,13 +305,22 @@ class ViewController:
                                         [[1, item[1], item[2], curr_uprate, target_price, item[4],
                                           100*(next_day_item[4]-target_price)/target_price]]
                                 else:
-                                    above_target_price_dict[curr_day_item[0]] = [[1, item[1], item[2], curr_uprate]]
+                                    above_target_price_dict[curr_day_item[0]] = [[1, item[1], item[2], curr_uprate,
+                                                                                  target_price, item[4],
+                                                                                  100*(next_day_item[4]-target_price)
+                                                                                  / target_price]]
                             else:
                                 if curr_day_item[0] in above_target_price_dict:
                                     above_target_price_dict[curr_day_item[0]] = above_target_price_dict[curr_day_item[0]] \
-                                                                                + [[0, item[1], item[2], curr_uprate]]
+                                                                                + [[0, item[1], item[2], curr_uprate,
+                                                                                    target_price, item[4],
+                                                                                    100*(next_day_item[4]-target_price)
+                                                                                    / target_price]]
                                 else:
-                                    above_target_price_dict[curr_day_item[0]] = [[0, item[1], item[2], curr_uprate]]
+                                    above_target_price_dict[curr_day_item[0]] = [[0, item[1], item[2], curr_uprate,
+                                                                                  target_price, item[4],
+                                                                                  100*(next_day_item[4]-target_price)
+                                                                                  / target_price]]
 
                             # 2. 최대값(고가)이 목표가(target price) * 수익률을 넘어선 횟수
                             if ((100.0 + profit_rate) / 100.0) * (item[4] + k * (curr_day_item[5] - curr_day_item[6])) <= \
@@ -311,16 +328,28 @@ class ViewController:
                                 if curr_day_item[0] in above_profit_target_price_dict:
                                     above_profit_target_price_dict[curr_day_item[0]] = \
                                         above_profit_target_price_dict[curr_day_item[0]] + \
-                                        [[1, item[1], item[2], curr_uprate]]
+                                        [[1, item[1], item[2], curr_uprate,
+                                          target_price, item[4],
+                                          100*(next_day_item[4]-target_price)
+                                          / target_price]]
                                 else:
-                                    above_profit_target_price_dict[curr_day_item[0]] = [[1, item[1], item[2], curr_uprate]]
+                                    above_profit_target_price_dict[curr_day_item[0]] = [[1, item[1], item[2], curr_uprate,
+                                                                                         target_price, item[4],
+                                                                                         100*(next_day_item[4]-target_price)
+                                                                                         / target_price]]
                             else:
                                 if curr_day_item[0] in above_profit_target_price_dict:
                                     above_profit_target_price_dict[curr_day_item[0]] = \
                                         above_profit_target_price_dict[curr_day_item[0]] + \
-                                        [[0, item[1], item[2], curr_uprate]]
+                                        [[0, item[1], item[2], curr_uprate,
+                                          target_price, item[4],
+                                          100*(next_day_item[4]-target_price)
+                                          / target_price]]
                                 else:
-                                    above_profit_target_price_dict[curr_day_item[0]] = [[0, item[1], item[2], curr_uprate]]
+                                    above_profit_target_price_dict[curr_day_item[0]] = [[0, item[1], item[2], curr_uprate,
+                                                                                         target_price, item[4],
+                                                                                         100*(next_day_item[4]-target_price)
+                                                                                         / target_price]]
         except:     # Catch all possible errors
             print("*** Error occurred: {} {}".format(self.code, self.name))
         is_processing = is_processing + 1
